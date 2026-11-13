@@ -1,0 +1,14 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "WISE_REPORT_SCHEDULE": "0 0 7 * * *",
+    "WISE_TENANT_ID": "<TENANT_UUID>",
+    "WISE_CLIENT_ID": "<CLIENT_UUID>",
+    "WISE_SITE_URL": "https://<TENANT>.sharepoint.com/sites/WISEEndpointIntelligence",
+    "WISE_ARCHIVE_ACCOUNT_URL": "https://<ARCHIVE_ACCOUNT>.blob.core.windows.net",
+    "WISE_ARCHIVE_CONTAINER": "wise-reports",
+    "WISE_ARCHIVE_PREFIX": "reports"
+  }
+}

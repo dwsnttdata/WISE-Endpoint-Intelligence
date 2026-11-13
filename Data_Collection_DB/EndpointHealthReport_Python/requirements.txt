@@ -1,0 +1,6 @@
+msal>=1.31,<2
+azure-functions>=1.21,<2
+requests>=2.32,<3
+azure-identity>=1.17,<2
+azure-storage-blob>=12.23,<13
+openai>=1.68,<2

@@ -1,0 +1,16 @@
+.wise-python/
+.venv/
+Archive/
+Archive_tobeDeleted/
+.python_packages/
+.gitignore
+*.ps1
+output/
+__pycache__/
+.git/
+.pytest_cache/
+local.settings.json
+local.settings.json.example
+test_*.py
+*.md
+*.docx

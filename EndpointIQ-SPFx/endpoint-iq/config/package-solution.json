@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "WISE Endpoint Intelligence",
+    "id": "43387551-b243-44a9-9f6c-61856c69b0ae",
+    "version": "1.0.10.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": false,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.23.2"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "WISE Endpoint Intelligence"
+      },
+      "longDescription": {
+        "default": "WISE Endpoint Intelligence management dashboard"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "WISE Endpoint Intelligence",
+        "description": "Activates the WISE Endpoint Intelligence dashboard.",
+        "id": "94426a84-f261-47df-a8f3-ed87900bfc88",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/endpoint-iq.sppkg"
+  }
+}

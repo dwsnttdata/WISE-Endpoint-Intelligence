@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "endpoint-iq-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/endpointIq/EndpointIqWebPart.js",
+          "manifest": "./src/webparts/endpointIq/EndpointIqWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "EndpointIqWebPartStrings": "lib/webparts/endpointIq/loc/{locale}.js"
+  }
+}

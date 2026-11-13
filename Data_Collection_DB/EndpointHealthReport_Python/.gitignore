@@ -1,0 +1,17 @@
+Archive/
+.wise-python/
+.venv/
+venv/
+.python_packages/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+output/
+local.settings.json
+local.settings.*.json
+!local.settings.json.example
+.env
+.env.*
+!*.example
+~$*
+*.log
