@@ -1096,7 +1096,7 @@ class CollectionTests(IsolatedTestCase):
                 optional = [row for row in report["collectionStatus"]["sources"] if row["source"].split(":")[0] in ("complianceDetails", "hardware") and row["status"] != "ok"]
                 self.assertEqual(report["collectionStatus"]["status"], "partial")
                 self.assertEqual(len(optional), 2)
-                self.assertEqual(sum(fragment in path for _, path in client.calls), 1)
+                self.assertEqual(sum(fragment in path for _, path in client.calls), 2 if fragment == "/deviceCompliancePolicyStates" else 1)
                 self.assertEqual(len(report["rawData"]["extraDetails"]), 2)
 
     def test_optional_detail_forbidden_and_core_throttling_still_block_publication(self):
@@ -1121,6 +1121,36 @@ class CollectionTests(IsolatedTestCase):
         self.assertEqual([row["httpStatus"] for row in configuration], [429, 429])
         self.assertEqual(sum("/deviceConfigurationStates" in path for _, path in client.calls), 1)
         self.assertEqual(len(report["rawData"]["extraDetails"]), 2)
+
+    def test_configuration_throttling_never_starves_policy_results(self):
+        client = self.two_device_client({"/deviceConfigurationStates": 429})
+        report = wise.collect_report(client, TENANT, extra_details=True)
+        sources = report["collectionStatus"]["sources"]
+        compliance = [row for row in sources if row["source"].startswith("complianceDetails:")]
+        self.assertEqual([row["status"] for row in compliance], ["ok", "ok"])
+        paths = [path for _, path in client.calls]
+        first_configuration = next(i for i, path in enumerate(paths) if "/deviceConfigurationStates" in path)
+        last_compliance = max(i for i, path in enumerate(paths) if "/deviceCompliancePolicyStates" in path)
+        self.assertLess(last_compliance, first_configuration)
+
+    def test_throttled_policy_results_are_recovered_after_the_other_passes(self):
+        client = self.two_device_client({})
+        original = client._read
+        state = {"throttled": False}
+        def throttle_first_compliance_call(path, paged):
+            if path.endswith("/deviceCompliancePolicyStates") and not state["throttled"]:
+                state["throttled"] = True
+                client.calls.append(("paged", path))
+                raise wise.GraphError(429, "TooManyRequests", "fake-request")
+            return original(path, paged)
+        client._read = throttle_first_compliance_call
+        report = wise.collect_report(client, TENANT, extra_details=True)
+        compliance = [row for row in report["collectionStatus"]["sources"] if row["source"].startswith("complianceDetails:")]
+        self.assertEqual([row["status"] for row in compliance], ["ok", "ok"])
+        self.assertEqual(report["collectionStatus"]["status"], "complete")
+        paths = [path for _, path in client.calls]
+        retried = [i for i, path in enumerate(paths) if "/deviceCompliancePolicyStates" in path]
+        self.assertGreater(retried[-1], max(i for i, path in enumerate(paths) if "/deviceConfigurationStates" in path))
 
     def test_inventory_reconciliation_failure_is_recorded(self):
         client = CollectionClient()

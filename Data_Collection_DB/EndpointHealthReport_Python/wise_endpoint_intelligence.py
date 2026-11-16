@@ -1022,13 +1022,24 @@ def collect_report(client: GraphClient, tenant_id: str, extra_details: bool = Fa
                     qualityUpdateProfiles=quality_profiles, featureUpdateAssignments=feature_assignments,
                     qualityUpdateAssignments=quality_assignments, autopilot=raw_autopilot, malware=raw_malware)
     if extra_details:
-        details = []
-        for record in inventory:
-            base = "deviceManagement/managedDevices/" + quote(record["deviceId"], safe="")
-            details.append(dict(deviceId=record["deviceId"], compliancePolicyStates=fetch("complianceDetails:" + record["deviceId"], base + "/deviceCompliancePolicyStates", unsupported=True),
-                                deviceConfigurationStates=fetch("configurationDetails:" + record["deviceId"], base + "/deviceConfigurationStates", unsupported=True),
-                                hardwareInformation=fetch("hardware:" + record["deviceId"], base + "?$select=id,hardwareInformation", False, True)))
-        raw_data["extraDetails"] = details
+        # Collect in priority order across all devices: policy results and hardware first,
+        # then configuration states, which Graph throttles hardest. A configuration 429
+        # storm must not starve the policy results the dashboard shows per device.
+        bases = {record["deviceId"]: "deviceManagement/managedDevices/" + quote(record["deviceId"], safe="") for record in inventory}
+        compliance = {key: fetch("complianceDetails:" + key, base + "/deviceCompliancePolicyStates", unsupported=True) for key, base in bases.items()}
+        hardware = {key: fetch("hardware:" + key, base + "?$select=id,hardwareInformation", False, True) for key, base in bases.items()}
+        configuration = {key: fetch("configurationDetails:" + key, base + "/deviceConfigurationStates", unsupported=True) for key, base in bases.items()}
+        # Recovery pass: throttling is temporary. Once the other passes have given Graph time to
+        # recover, retry the policy results that were throttled; a repeat throttle stops it again.
+        pending = {"complianceDetails:" + key for key in bases if any(entry["source"] == "complianceDetails:" + key and entry["status"] == "unavailable" and entry.get("httpStatus") in [429, 500, 502, 503, 504] for entry in statuses)}
+        if pending:
+            logging.getLogger("wise.graph").info("Graph complianceDetails recovery pass for %s throttled devices", len(pending))
+            throttled_categories.discard("complianceDetails")
+            statuses[:] = [entry for entry in statuses if entry["source"] not in pending]
+            for key, base in bases.items():
+                if "complianceDetails:" + key in pending:
+                    compliance[key] = fetch("complianceDetails:" + key, base + "/deviceCompliancePolicyStates", unsupported=True)
+        raw_data["extraDetails"] = [dict(deviceId=key, compliancePolicyStates=compliance[key], deviceConfigurationStates=configuration[key], hardwareInformation=hardware[key]) for key in bases]
     report["rawData"] = raw_data
     report["collectionStatus"] = dict(status="error" if any(entry["status"] == "error" for entry in statuses) else "partial" if any(entry["status"] == "unavailable" for entry in statuses if entry["source"] != "microsoftWindowsReleaseCatalog") else "complete", sources=statuses,
                                      caveats=["Unsupported optional endpoints are not clean results.", "Windows patch compliance is a Microsoft monthly build-baseline comparison, not confirmation of an Intune installation attempt.", "Feature update target/applicability is not inferred from policy assignments.", "Storage uses exact bytes / 2**30, not rounded PowerShell GB."])
