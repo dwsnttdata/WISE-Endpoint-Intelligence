@@ -769,12 +769,11 @@ def collect_report(client: GraphClient, tenant_id: str, extra_details: bool = Fa
     now = dt.datetime.now(dt.timezone.utc)
     timestamp = iso(now)
     statuses = []
-    configuration_throttled = False
+    throttled_categories = set()
     def fetch(name, path, paged=True, unsupported=False):
-        nonlocal configuration_throttled
-        configuration_detail = name.startswith("configurationDetails:")
-        if configuration_detail and configuration_throttled:
-            statuses.append(dict(source=name, status="unavailable", httpStatus=429, code="ConfigurationDetailsThrottled"))
+        category = name.split(":", 1)[0] if name.startswith(("complianceDetails:", "configurationDetails:", "hardware:")) else None
+        if category in throttled_categories:
+            statuses.append(dict(source=name, status="unavailable", httpStatus=429, code="OptionalDetailsThrottled"))
             return [] if paged else {}
         try:
             data = client.get_paged(path) if paged else client.get(path)
@@ -785,14 +784,15 @@ def collect_report(client: GraphClient, tenant_id: str, extra_details: bool = Fa
         except GraphError as error:
             if error.status == 401:
                 raise WiseError(f"Graph authentication was rejected (HTTP 401; source={name}; request-id={error.request_id or 'unavailable'}). Collection stopped; no archive or SharePoint publication started. For local browser mode check the delegated app, signed-in account and tenant access; Azure application authentication is configured separately.") from None
-            if configuration_detail and error.status == 429:
-                configuration_throttled = True
-                logging.getLogger("wise.graph").warning("Graph configuration details remain throttled; skipping remaining configuration detail requests for this collection")
-            status = "unavailable" if unsupported and (error.status in [400, 404] or (configuration_detail and error.status == 429)) else "error"
+            transient = category is not None and error.status in [429, 500, 502, 503, 504]
+            if transient:
+                throttled_categories.add(category)
+                logging.getLogger("wise.graph").warning("Graph %s remain unavailable (HTTP %s); skipping remaining requests in this category for this collection", category, error.status)
+            status = "unavailable" if transient or (unsupported and error.status in [400, 404]) else "error"
             statuses.append(dict(source=name, status=status, httpStatus=error.status, code=error.code, requestId=error.request_id))
             print(f"  Graph source {name}: {status} (HTTP {error.status}, {error.code or 'no error code'}).", flush=True)
         except WiseError as error:
-            statuses.append(dict(source=name, status="error", code="InvalidOrUnavailableResponse", diagnostic=str(error)))
+            statuses.append(dict(source=name, status="unavailable" if category else "error", code="InvalidOrUnavailableResponse", diagnostic=str(error)))
             print(f"  Graph source {name}: error ({error}).", flush=True)
         return [] if paged else {}
     def section(source, **values):

@@ -1077,6 +1077,34 @@ class CollectionTests(IsolatedTestCase):
         self.assertEqual(report["rawData"]["extraDetails"][0]["hardwareInformation"]["id"], "fake-device")
         self.assertEqual(len(report["collectionStatus"]["sources"]), 15)
 
+    def two_device_client(self, failures):
+        client = CollectionClient(failures)
+        original = client.get_paged
+        def multiple_devices(path):
+            result = original(path)
+            if path == "deviceManagement/managedDevices" or path.startswith("deviceManagement/managedDevices?$select="):
+                return result + [{**copy.deepcopy(result[0]), "id": "fake-device-2"}]
+            return result
+        client.get_paged = multiple_devices
+        return client
+
+    def test_optional_detail_throttling_or_service_errors_never_block_publication(self):
+        for fragment, status in (("/deviceCompliancePolicyStates", 429), ("/deviceCompliancePolicyStates", 503), ("hardwareInformation", 429), ("hardwareInformation", 500)):
+            with self.subTest(fragment=fragment, status=status):
+                client = self.two_device_client({fragment: status})
+                report = wise.collect_report(client, TENANT, extra_details=True)
+                optional = [row for row in report["collectionStatus"]["sources"] if row["source"].split(":")[0] in ("complianceDetails", "hardware") and row["status"] != "ok"]
+                self.assertEqual(report["collectionStatus"]["status"], "partial")
+                self.assertEqual(len(optional), 2)
+                self.assertEqual(sum(fragment in path for _, path in client.calls), 1)
+                self.assertEqual(len(report["rawData"]["extraDetails"]), 2)
+
+    def test_optional_detail_forbidden_and_core_throttling_still_block_publication(self):
+        report = wise.collect_report(self.two_device_client({"/deviceCompliancePolicyStates": 403}), TENANT, extra_details=True)
+        self.assertEqual(report["collectionStatus"]["status"], "error")
+        report = wise.collect_report(CollectionClient({"managedDeviceEncryptionStates": 429}), TENANT)
+        self.assertEqual(report["collectionStatus"]["status"], "error")
+
     def test_configuration_throttling_marks_partial_and_skips_remaining_devices(self):
         client = CollectionClient({"/deviceConfigurationStates": 429})
         original = client.get_paged
